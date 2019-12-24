@@ -1,93 +1,103 @@
-var urlJSON = 'https://api.myjson.com/bins/';
-var idsParticipants = [
-	'mi7s4',
-	'1hiwec',
-	'10x4c4',
-	'ew2yc',
-	't6hh0',
-	'jpoyc',
-	'kwk5w',
-	'9lbo4',
-	'gqixg',
-	'z6yok'
-];
-
-var idsDraw = [
-	'jez5g',
-	'83qno',
-	'19m1ro',
-	'sch84',
-	'sxwtw',
-	'6dl04',
-	'1cncyc',
-	'1du85w',
-	'1f13dg',
-	'ghyac'
-]
-
-
 var participants = [];
 var draw = [];
 
-function getParticipants(){
-	idsParticipants.forEach(id => {
-		axios.get(`${urlJSON}/${id}`)
-			.then(response => {
-				const participant = response.data;
-				participant.idJSON = id;
-				participants.push(participant);
-			})
-			.catch(error => {
-				console.log(error);
-			})
-	})
+function getUrl(){
+	const url = 'https://api.myjson.com/bins';
+	return url;
 }
 
-function getDraw(){
-	idsDraw.forEach(id => {
-		axios.get(`${urlJSON}/${id}`)
-			.then(response => {
-				const item = response.data;
-				item.idJSON = id;
-				draw.push(item);
-			})
-			.catch(error => {
-				console.log(error);
-			})
-	})
+function getUrisParticipants(){
+	return [
+		`mi7s4`,
+		`1hiwec`,
+		`10x4c4`,
+		`ew2yc`,
+		`t6hh0`,
+		`jpoyc`,
+		`kwk5w`,
+		`9lbo4`,
+		`gqixg`,
+		`z6yok`
+	];
+}
+
+function getUrisDraw(){
+	return [
+		`jez5g`,
+		`83qno`,
+		`19m1ro`,
+		`sch84`,
+		`sxwtw`,
+		`6dl04`,
+		`1cncyc`,
+		`1du85w`,
+		`1f13dg`,
+		`ghyac`
+	];
+}
+
+async function getPromises(uris){
+	const url = getUrl();
+	const promises = [];
+	uris.forEach(uri => {
+		promises.push(axios.get(`${url}/${uri}`));
+	});
+	await Promise.all(promises);
+	return promises;
+}
+
+async function getParticipants(){
+	const uris = getUrisParticipants();
+	const promises = await getPromises(uris);
+	promises.forEach(promise => {
+		promise.then((response) => {
+			participants.push(response.data);
+		})
+	});
+}
+
+async function getDraw(){
+	const uris = getUrisDraw();
+	const promises = await getPromises(uris);
+	promises.forEach(promise => {
+		promise.then((response) => {
+			draw.push(response.data);
+		})
+	});
+}
+
+async function goToHome(user){
+	const drawn = await drawFriend(user.id);
+	const {name} = getParticipantById(drawn.idDrawn);
+	localStorage.setItem("name", user.name);
+	localStorage.setItem("drawn", name);
+	window.location.href = "home.html";
+}
+
+async function savePassword(user){
+	const url = getUrl();
+	await axios.put(`${url}/${user.idJSON}`, user);
 }
 
 async function login() {
 	const name = document.getElementById("name").value;
-	const password = document.getElementById("password").value;
-	const user = participants.find(participant => participant.name === name);
+	const passwordForm = document.getElementById("password").value;
+	const user = getParticipantByName(name);
 	if(user){
-		if (password !== '') {
+		if (passwordForm === '') {
+			alert('Informe uma senha!');
+		}else{
 			if(user.password === ''){
-				//Update user password
-				user.password = password;
-				await axios.put(`${urlJSON}/${user.idJSON}`, user);
-				localStorage.setItem("id", user.id);
-				localStorage.setItem("name", user.name);
-				const drawn = await drawFriend(user.id);
-				const {name} = getDrawn(drawn.idDrawn);
-				localStorage.setItem("drawn", name);
-				window.location.href = "home.html";
+				user.password = passwordForm;
+				await savePassword(user)
+				goToHome(user);
 			}else{
-				if(user.password === password){
-					drawFriend(user.id);
-					localStorage.setItem("id", user.id);
-					localStorage.setItem("name", user.name);
-					const drawn = await drawFriend(user.id);
-					const {name} = getDrawn(drawn.idDrawn);
-					localStorage.setItem("drawn", name);
-					window.location.href = "home.html";
+				if(user.password === passwordForm){
+					goToHome(user);
 				}else{
 					alert('Senha incorreta!')
 				}
 			}
-		}else{
-			alert('Informe uma senha!')
 		}
 	}else{
 		alert('Usuário não encontrado!');
@@ -95,13 +105,13 @@ async function login() {
 }
 
 async function isLogged(){
-	if(!localStorage.getItem("id")){
-		logout();
-	}else{
+	if(localStorage.getItem("name")){
 		const welcome = document.getElementById('welcome');
 		welcome.appendChild(document.createTextNode('Bem-vindo(a), ' + localStorage.getItem("name") + '!'));
 		const message = document.getElementById('message');
 		message.appendChild(document.createTextNode('Seu amigo oculto é: ' + localStorage.getItem("drawn")))
+	}else{
+		logout();
 	}
 }
 
@@ -112,29 +122,22 @@ function logout(){
 
 async function drawFriend(id){
 	const drawn = isInDraw(id);
-
 	if(drawn.idDrawn == ""){
-		//Remove participant
 		const candidates =  filterCandidates(id);
-		//Draw participant
 		const randomDrawn = randomParticipant(candidates);
-
 		await axios.put(`${urlJSON}/${drawn.idJSON}`,
 			{
 				idParticipant: id,
 				idDrawn : randomDrawn.id
 			}
 		);
-		const participant = getDrawn(randomDrawn.id);
+		const participant = getParticipantById(randomDrawn.id);
 		participant.drawn = true;
 		await axios.put(`${urlJSON}/${participant.idJSON}`, participant);
-
 		draw.forEach(item => {
 			if(item.idParticipant == id) item.idDrawn = randomDrawn.id;
 		});
-
 	}
-
 	return drawn;
 }
 
@@ -142,8 +145,16 @@ function isInDraw(id){
 	return draw.find(item => item.idParticipant == id);
 }
 
-function getDrawn(id){
-		return participants.find(participant => participant.id == id);
+function wasDrawn(id){
+	return draw.find(item => item.idDrawn == id);
+}
+
+function getParticipantById(id){
+	return participants.find(participant => participant.id == id);
+}
+
+function getParticipantByName(name){
+	return participants.find(participant => participant.name == name);
 }
 
 function randomParticipant(candidates) {
@@ -154,23 +165,11 @@ function randomParticipant(candidates) {
 }
 
 function filterCandidates(id){
-	return participants.filter(person => {
-		return person.id != id && !person.drawn
-	});
+	const withOutParticipant = participants.filter(person => person.id != id);
+	const theUnaffected = withOutParticipant.filter(person => !person.drawn);
+	const presenter = wasDrawn(id);
+	if(presenter){
+		return theUnaffected.filter(person => person.id != presenter.id);
+	}
+	return theUnaffected;
 }
-
-function showReport(){
-	const report = document.getElementById('report');
-	const ul = document.createElement('ul');
-	draw.forEach(item => {
-		const li = document.createElement('li');
-		const {name} = participants.find(participant => participant.id == item.idParticipant);
-		const status = (item.idDrawn !== "") ? "acessou" : "não acessou";
-		li.appendChild(document.createTextNode(name + ' ' + status));
-		ul.appendChild(li);
-	})
-	report.appendChild(ul);
-}
-
-getParticipants();
-getDraw();
